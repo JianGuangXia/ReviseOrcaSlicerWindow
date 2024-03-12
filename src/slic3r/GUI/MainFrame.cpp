@@ -2286,7 +2286,7 @@ void MainFrame::init_menubar_as_editor()
             []() { return true; }, this);
         append_menu_item(
             export_menu, wxID_ANY, _L("Export Dedicated 3MF") + dots /* + "\tCtrl+X"*/, _L("Export Dedicated 3MF to files"),
-            [this](wxCommandEvent &) {if (m_plater) m_plater->export_core_dedicated_3mf();},
+            [this](wxCommandEvent &) {if (m_plater) m_plater->export_core_3mf();},
             "menu_export_sliced_file", nullptr, [this]() { return can_export_model(); }, this);
 
         append_submenu(fileMenu, export_menu, wxID_ANY, _L("Export"), "");

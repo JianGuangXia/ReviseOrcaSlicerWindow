@@ -426,8 +426,12 @@ void OG_CustomCtrl::OnLeftDown(wxMouseEvent& event)
 
     for (const CtrlLine& line : ctrl_lines) {
         if (!line.is_visible) continue;
+#ifdef _HIDE_HYPERLINK_
+#else
         if (line.launch_browser())
             return;
+#endif // _HIDE_HYPERLINK_
+
         for (size_t opt_idx = 0; opt_idx < line.rects_undo_icon.size(); opt_idx++)
             if (is_point_in_rect(pos, line.rects_undo_icon[opt_idx])) {
                 const std::vector<Option>& option_set = line.og_line.get_options();
