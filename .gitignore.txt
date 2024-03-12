@@ -1,2 +1,5 @@
 !/src/libslic3r
 !/src/slic3r
+/*.bat
+/*.sh
+/*.PL
