@@ -92,6 +92,8 @@ public:
     wxTimer * m_LoginUpdateTimer{nullptr};
     void OnFreshLoginStatus(wxTimerEvent &event);
 
+    bool SetCursor(const wxCursor &cursor);
+
 public:
     void SendRecentList(int images);
     void SendDesignStaffpick(bool on);

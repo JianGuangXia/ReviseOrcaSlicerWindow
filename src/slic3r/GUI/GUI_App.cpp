@@ -4,6 +4,8 @@
 #include "GUI_ObjectList.hpp"
 #include "GUI_Factories.hpp"
 #include "format.hpp"
+#include "WriteDxf.h"
+#include "miniz.h"
 
 // Localization headers: include libslic3r version first so everything in this file
 // uses the slic3r/GUI version (the macros will take precedence over the functions).
@@ -99,6 +101,7 @@
 #include "ReleaseNote.hpp"
 #include "PrivacyUpdateDialog.hpp"
 #include "ModelMall.hpp"
+#include <curl/curl.h>
 
 //#ifdef WIN32
 //#include "BaseException.h"
@@ -136,9 +139,12 @@
     #include <gtk/gtk.h>
 #endif
 
+#define _IGNORE_VERSION_REMAINDER
 using namespace std::literals;
 namespace pt = boost::property_tree;
 
+#define _HIDE_WELCOME_WIZARD
+#define _HIDE_DO_YOU_KNOWN
 namespace Slic3r {
 namespace GUI {
 
@@ -298,7 +304,7 @@ public:
         memDc.SetTextForeground(StateColor::darkModeColorFor(wxColor(134, 134, 134)));
         memDc.DrawLabel(m_constant_text.version, version_rect, wxALIGN_LEFT | wxALIGN_BOTTOM);
 
-        auto bs_version = wxString::Format("Based on BambuStudio and PrusaSlicer").ToStdString();
+        auto bs_version = wxString::Format("Channel Letter Design and Slicing Software").ToStdString();
         memDc.SetFont(Label::Body_12);
         wxSize text_rect = memDc.GetTextExtent(bs_version);
         int start_x = (title_rect.GetLeft() + version_rect.GetRight()) / 2 - text_rect.GetWidth()/2;
@@ -311,7 +317,8 @@ public:
         int logo_margin = FromDIP(72 * m_scale);
         int logo_size = FromDIP(122 * m_scale);
         int logo_width = FromDIP(94 * m_scale);
-        wxBitmap logo_bmp = *bmp_cache.load_svg("splash_logo", logo_size, logo_size);
+        //wxBitmap logo_bmp = *bmp_cache.load_svg("splash_logo", logo_size, logo_size);
+        wxBitmap logo_bmp = *bmp_cache.load_png("splash_logo_bak", logo_size, logo_size);
         int logo_y = top_margin + title_rect.GetHeight() + logo_margin;
         memDc.DrawBitmap(logo_bmp, (width - logo_width) / 2, logo_y, true);
 
@@ -749,6 +756,8 @@ static const FileWildcards file_wildcards_by_type[FT_SIZE] = {
     /* FT_SVG */     { "SVG files"sv,       { ".svg"sv } },
     /* FT_TEX */     { "Texture"sv,         { ".png"sv, ".svg"sv } },
     /* FT_SL1 */     { "Masked SLA files"sv, { ".sl1"sv, ".sl1s"sv } },
+    /* FT_SIGN3D */  { "Encode 3MF files"sv, {".s3d"sv}},
+    /* FT_MODEL_EXCLUDE_3MF */ {"Supported files"sv, {".stl"sv, ".stp"sv, ".step"sv, ".svg"sv, ".amf"sv, ".obj"sv}},
 };
 
 // This function produces a Win32 file dialog file template mask to be consumed by wxWidgets on all platforms.
@@ -1154,11 +1163,14 @@ void GUI_App::post_init()
     }*/
 
     // BBS: to be checked
+#ifdef _HIDE_DO_YOU_KNOWN
+#else
 #if 1
     // show "Did you know" notification
     if (app_config->get("show_hints") == "true" && !is_gcode_viewer()) {
         plater_->get_notification_manager()->push_hint_notification(false);
     }
+#endif
 #endif
 
     if (app_config->get("stealth_mode") == "false")
@@ -1188,10 +1200,11 @@ void GUI_App::post_init()
         CallAfter([this] {
             bool cw_showed = this->config_wizard_startup();
 
-            std::string http_url = get_http_url(app_config->get_country_code());
+            //std::string http_url = get_http_url(app_config->get_country_code());
             std::string language = GUI::into_u8(current_language_code());
             std::string network_ver = Slic3r::NetworkAgent::get_version();
             bool        sys_preset  = app_config->get("sync_system_preset") == "true";
+            std::string http_url("https:\\\\app.formletter.xyz\\");
             this->preset_updater->sync(http_url, language, network_ver, sys_preset ? preset_bundle : nullptr);
 
             this->check_new_version_sf();
@@ -2503,6 +2516,8 @@ bool GUI_App::on_init_inner()
                 }
                 if (!skip_this_version
                     || evt.GetInt() != 0) {
+#ifdef _IGNORE_VERSION_REMAINDER
+ #else
                     UpdateVersionDialog dialog(this->mainframe);
                     wxString            extmsg = wxString::FromUTF8(version_info.description);
                     dialog.update_version_info(extmsg, version_info.version_str);
@@ -2520,6 +2535,7 @@ bool GUI_App::on_init_inner()
                     default:
                         ;
                     }
+#endif
                 }
             }
             });
@@ -3624,17 +3640,37 @@ void GUI_App::load_project(wxWindow *parent, wxString& input_file) const
         input_file = dialog.GetPath();
 }
 
-void GUI_App::import_model(wxWindow *parent, wxArrayString& input_files) const
-{
+  void GUI_App::import_encode_3mf(wxWindow *parent, wxString &input_file) const 
+  {
+      input_file.Clear();
+      wxFileDialog dialog(parent ? parent : GetTopWindow(),
+#ifdef __APPLE__
+                          _L("Choose one encode 3mf file (3mf):"),
+#else
+                          _L("Choose one encode 3mf file (3mf):"),
+#endif
+                          from_u8(app_config->get_last_dir()), "", file_wildcards(FT_SIGN3D),
+                          wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
+
+      if (dialog.ShowModal() == wxID_OK) 
+      {
+          wxArrayString input_files;
+          dialog.GetPaths(input_files);
+          if (!input_files.empty()) input_file = input_files[0];
+      }
+  }
+
+void GUI_App::import_model(wxWindow *parent, wxArrayString &input_files, FileType type/* = FT_MODEL*/) const
+  {
     input_files.Clear();
     wxFileDialog dialog(parent ? parent : GetTopWindow(),
 #ifdef __APPLE__
         _L("Choose one or more files (3mf/step/stl/svg/obj/amf/usd*/abc/ply):"),
 #else
-        _L("Choose one or more files (3mf/step/stl/svg/obj/amf):"),
+        _L("Choose one or more files (step/stl/svg/obj/amf):"),
 #endif
         from_u8(app_config->get_last_dir()), "",
-        file_wildcards(FT_MODEL), wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
+                        /*file_wildcards(FT_MODEL)*/ file_wildcards(type), wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
 
     if (dialog.ShowModal() == wxID_OK)
         dialog.GetPaths(input_files);
@@ -3932,6 +3968,10 @@ std::string GUI_App::handle_web_request(std::string cmd)
                 if (path.has_value()) {
                     wxLaunchDefaultBrowser(path.value());
                 }
+            } else if (command_str.compare("DownLoadOutLine") == 0) {
+                handle_export_outline(root);
+            } else if (command_str.compare("DownLoadStl") == 0) {
+                handle_download_stl(root);
             }
         }
     }
@@ -6275,7 +6315,11 @@ bool GUI_App::config_wizard_startup()
 {
     if (!m_app_conf_exists || preset_bundle->printers.only_default_printers()) {
         BOOST_LOG_TRIVIAL(info) << "run wizard...";
+#ifdef _HIDE_WELCOME_WIZARD
+        run_wizard(ConfigWizard::RR_USER, ConfigWizard::SP_PRINTERS);
+#else
         run_wizard(ConfigWizard::RR_DATA_EMPTY);
+#endif // _HIDE_WELCOME_WIZARD
         BOOST_LOG_TRIVIAL(info) << "finished run wizard";
         return true;
     } /*else if (get_app_config()->legacy_datadir()) {
@@ -6462,6 +6506,401 @@ void GUI_App::disassociate_files(std::wstring extend)
        ::SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
 
+void TranslateFileToDxf(const std::string &json_string, boost::filesystem::path &out_directory, MainFrame* mainframe, const std::string& version_text)
+{ 
+    //wxProgressDialog proDlg(_L("store as dxf"), _L("storing dxf file..."));
+    ProgressDialog dlg(_L("store as dxf"), "", 100, find_toplevel_parent(mainframe), wxPD_AUTO_HIDE | wxPD_CAN_ABORT | wxPD_APP_MODAL);
+    WriteDxf dxf_writer;
+
+    DXF_VERSION version ;
+    if (version_text == "ACAD 2000") {
+        version = AC1015;
+    } else if (version_text == "ACAD 2004") {
+        version = AC1018;
+    } else if (version_text == "ACAD 2007") {
+        version = AC1021;
+    } else if (version_text == "ACAD 2010") {
+        version = AC1024;
+    } else if (version_text == "ACAD 2013") {
+        version = AC1027;
+    } else {
+        version = AC1015;
+    }
+
+
+    dxf_writer.WriteToDxf(json_string, out_directory.string().c_str(), enLocation::TOP,version);
+    dlg.Update(50);
+    dxf_writer.WriteToDxf(json_string, out_directory.string().c_str(), enLocation::BOTTOM,version);
+    dlg.Update(100);
+}
+
+
+
+using pstree =  boost::property_tree::ptree;
+void GUI_App::handle_export_outline(const pstree &root) 
+{ 
+    std::string version;
+    if (root.get_child_optional("version") != boost::none) {
+        version = root.get<std::string>("version");
+    }
+
+    if (root.get_child_optional("data") != boost::none) 
+    {
+        pstree data_node = root.get_child("data");
+        std::stringstream ss;
+        boost::property_tree::write_json(ss,data_node,false);
+        MainFrame * mainFrame = wxGetApp().mainframe;
+        wxDirDialog dir_dialog(mainFrame, _L("Choose a directory"), "",
+                        wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+
+        if (dir_dialog.ShowModal() == wxID_OK) 
+        {
+            TranslateFileToDxf(ss.str(), boost::filesystem::path(dir_dialog.GetPath()),this->mainframe,version);
+        }
+    }
+ }
+
+struct model_info
+{
+    char file_name[16];
+    Vec3d position;
+    Vec3d Center;
+};
+
+struct stl_configuer
+{
+    char name[12];
+    bool infill_open;
+    char infill_pattern[32];
+    int  infill_sparse_density;
+    int  line_width;
+    int  wall_thickness;
+    int  wall_line_count;
+    int  iModelsNum;
+    std::map<std::string, model_info> model_set;
+    std::map<std::string, boost::filesystem::path> mode_file_path;
+
+    std::string zip_file_name;
+    std::string zip_download_url;
+};
+
+void parse_configuer(const std::string& json_string, stl_configuer& stStlConfig) 
+{ 
+    cJSON *root = cJSON_Parse(json_string.c_str());
+    cJSON* name_item  =  cJSON_GetObjectItem(root, "name");
+    if (name_item && name_item->type == cJSON_String) {
+        strcpy(stStlConfig.name, name_item->valuestring);
+    }
+
+   cJSON * infill_open_item = cJSON_GetObjectItem(root, "infill_open");
+    if (infill_open_item && stricmp(infill_open_item->valuestring, "false") == 0) {
+       stStlConfig.infill_open = false;
+    } 
+    else if (infill_open_item && stricmp(infill_open_item->valuestring, "true") == 0) 
+    {
+        stStlConfig.infill_open = true;
+    }
+
+    cJSON *infill_pattern_item = cJSON_GetObjectItem(root, "infill_pattern");
+    if (infill_pattern_item && infill_pattern_item->type == cJSON_String) {
+        strcpy(stStlConfig.infill_pattern, infill_pattern_item->valuestring);
+    } 
+
+     cJSON *infill_sparse_density_item = cJSON_GetObjectItem(root, "infill_sparse_density");
+    if (infill_sparse_density_item ) {
+         stStlConfig.infill_sparse_density = atoi(infill_sparse_density_item->valuestring);
+    }
+
+      cJSON *line_width_item = cJSON_GetObjectItem(root, "line_width");
+    if (line_width_item ) {
+          stStlConfig.line_width = atoi(line_width_item->valuestring);
+    }
+
+     cJSON *wall_thickness_item = cJSON_GetObjectItem(root, "wall_thickness");
+    if (wall_thickness_item ) {
+              stStlConfig.wall_thickness = atoi(wall_thickness_item->valuestring);
+    }
+
+     cJSON *wall_line_count_item = cJSON_GetObjectItem(root, "wall_line_count");
+    if (wall_line_count_item) {
+                  stStlConfig.wall_line_count = atoi(wall_line_count_item->valuestring);
+    }
+    
+    cJSON *num_item = cJSON_GetObjectItem(root, "num");
+    if (num_item) {
+        stStlConfig.iModelsNum = atoi(num_item->valuestring);
+    }
+
+    cJSON *models_item = cJSON_GetObjectItem(root, "models");
+    int iModelsNum = 0;
+    if (models_item->type == cJSON_Array) {
+        iModelsNum = cJSON_GetArraySize(models_item);
+    }
+
+    for (int index = 0; index < iModelsNum; index++) 
+    {
+        cJSON *model_item = cJSON_GetArrayItem(models_item,index);
+
+        model_info stModelInfo = {0};
+        cJSON *name_item   = cJSON_GetObjectItem(model_item, "name");
+        if (name_item) {
+            strcpy(stModelInfo.file_name, name_item->valuestring);
+        }
+
+       cJSON *position_item = cJSON_GetObjectItem(model_item, "position");
+        if (position_item) {
+           cJSON *item = cJSON_GetObjectItem(position_item, "x");
+            double x    = atof(item->valuestring);
+           item = cJSON_GetObjectItem(position_item, "y");
+           double y    = atof(item->valuestring);
+
+           item     = cJSON_GetObjectItem(position_item, "z");
+           double z = atof(item->valuestring);
+
+          stModelInfo.position = Vec3d(x, y, z);
+        }
+
+
+        cJSON *center_item = cJSON_GetObjectItem(model_item, "center");
+        if (center_item) {
+            cJSON *item = cJSON_GetObjectItem(center_item, "x");
+            double x    = atof(item->valuestring);
+            item        = cJSON_GetObjectItem(center_item, "y");
+            double y    = atof(item->valuestring);
+
+            item     = cJSON_GetObjectItem(center_item, "z");
+            double z = atof(item->valuestring);
+
+            stModelInfo.Center = Vec3d(x, y, z);
+        }
+
+        stStlConfig.model_set[stModelInfo.file_name] = stModelInfo;
+    }
+
+    cJSON *zip_item = cJSON_GetObjectItem(root, "zip");
+    if (zip_item) {
+        stStlConfig.zip_download_url = zip_item->valuestring;
+
+        size_t index = stStlConfig.zip_download_url.rfind("/");
+        if (index != std::string::npos) {
+            stStlConfig.zip_file_name = stStlConfig.zip_download_url.substr(index + 1);
+        }
+    }
+}
+
+#define DOWNLOAD_PRECENT 25
+#define EXTRACT_PRECENT  95
+#define DONE_PRECENT 100
+
+size_t curlWriteFunction(void *ptr, size_t size, size_t nmemb, FILE *stream)
+{ 
+    return fwrite(ptr, size, nmemb, stream); 
+}
+
+int DownLoadStlSelf(const std::string &url, const boost::filesystem::path &store_path, 
+     ProgressDialog& dlg,int value,int iTimeOut /*= 60*/)
+{
+    int         result = 0;
+    std::string err_msg;
+
+    Slic3r::Http http_url = Slic3r::Http::get(url);
+    http_url.timeout_connect(TIMEOUT_CONNECT)
+        .timeout_max(iTimeOut)
+        .on_progress([& dlg,& value](Http::Progress pg, bool &cancel) 
+            { 
+                if (0 != pg.dltotal) 
+                {
+                  dlg.Update(pg.dlnow / pg.dltotal * value, _L("Importing 3D models..."));
+                 }
+            })
+        .on_complete([&url,&store_path,&result,&err_msg](std::string body, unsigned status) {
+            try {
+                   FILE *fp = fopen(store_path.string().c_str(), "wb"); 
+                   if (!fp) {
+                       result = -1;
+                       err_msg = "fail to open zip file for write";
+                       return result;
+                   }
+
+                   fwrite(body.c_str(), body.length(),1, fp); 
+                   fclose(fp);
+                }
+             catch (...) {
+                BOOST_LOG_TRIVIAL(error) << "[download_stl]: catch unknown exception";
+                ;
+            }
+        })
+        .on_error([&result, &err_msg](std::string body, std::string error, unsigned int status) {
+            BOOST_LOG_TRIVIAL(error) << "[download_stl ] on_error: " << error << ", body = " << body;
+            err_msg += "[download_stl 1] on_error: " + error + ", body = " + body;
+            result = -1;
+        }).perform_sync();
+
+        return result;
+}
+
+int RemoveFile(const std::vector<boost::filesystem::path> &delete_file_path)
+{
+  int iRetValue= 0;
+  for (size_t index = 0; index < delete_file_path.size(); index++) 
+  {
+      if (boost::filesystem::exists(delete_file_path[index])) 
+      {
+          boost::filesystem::remove(delete_file_path[index]);
+      }
+  }
+  return iRetValue;
+}
+
+void IncreaseProgressValue(ProgressDialog &dlg, int & current_value, int step_value, int end_value)
+{
+    current_value += step_value;
+    current_value = current_value > end_value ? end_value : current_value;
+    dlg.Update(current_value, _L("Importing 3D models..."));
+}
+
+int MinizReadFileFromZipFile(const boost::filesystem::path & zip_file,
+                             const boost::filesystem::path &       extract_directory,
+                             std::vector<boost::filesystem::path> &files_path,
+                             ProgressDialog& dlg,int start_value,int end_value)
+{
+    int            step_value = 5;
+    int            current_value = start_value;
+
+    mz_zip_archive zip_archive;
+    memset(&zip_archive, 0, sizeof(zip_archive));
+    IncreaseProgressValue(dlg, current_value, step_value, end_value);
+
+    mz_bool status = mz_zip_reader_init_file(&zip_archive, zip_file.string().c_str(), 0);
+    if (!status) {
+        printf("mz_zip_reader_init_file() failed!\n");
+        return EXIT_FAILURE;
+    }
+
+    IncreaseProgressValue(dlg, current_value, step_value, end_value);
+
+    // Get and print information about each file in the archive.
+    std::map<std::string, int> zip_file_info;
+    for (int i = 0; i < (int) mz_zip_reader_get_num_files(&zip_archive); i++) 
+    {
+        mz_zip_archive_file_stat file_stat;
+        if (!mz_zip_reader_file_stat(&zip_archive, i, &file_stat)) {
+            printf("mz_zip_reader_file_stat() failed!\n");
+            mz_zip_reader_end(&zip_archive);
+            return EXIT_FAILURE;
+        }
+
+        if (0 != stricmp(file_stat.m_filename,"config.txt")) 
+        {
+            zip_file_info[file_stat.m_filename] = i;
+        }
+    }
+    IncreaseProgressValue(dlg, current_value, step_value, end_value);
+
+    // Close the archive, freeing any resources it was using
+    mz_zip_reader_end(&zip_archive);
+
+    // Now verify the compressed data
+    memset(&zip_archive, 0, sizeof(zip_archive));
+    status = mz_zip_reader_init_file(&zip_archive, zip_file.string().c_str(), 0);
+    if (!status) {
+        printf("mz_zip_reader_init_file() failed!\n");
+        return EXIT_FAILURE;
+    }
+
+    int iTotalSize = zip_file_info.size();
+    int iLeftValue = end_value - current_value;
+    int  iCurrentStepValue = iLeftValue / iTotalSize;
+    std::map<std::string, int>::iterator iteInfo = zip_file_info.begin();
+    for (; iteInfo != zip_file_info.end(); ++iteInfo) 
+    {
+        boost::filesystem::path dest_path = extract_directory / boost::filesystem::path(iteInfo->first.c_str());
+        if (boost::filesystem::exists(dest_path)) 
+        {
+            boost::filesystem::remove(dest_path);
+        }
+
+        if (!mz_zip_reader_extract_to_file(&zip_archive, iteInfo->second, dest_path.string().c_str(),0))
+        {
+            printf("mz_zip_reader_extract_to_file() failed!\n");
+            mz_zip_reader_end(&zip_archive);
+            return EXIT_FAILURE;
+        }
+
+        files_path.push_back(dest_path);
+        IncreaseProgressValue(dlg, current_value, iCurrentStepValue, end_value);
+    }
+
+    // Close the archive, freeing any resources it was using
+    mz_zip_reader_end(&zip_archive);
+    dlg.Update(end_value, _L("Importing 3D models..."));
+    return EXIT_SUCCESS;
+ }
+
+
+void GUI_App::handle_download_stl(const pstree &root) 
+{
+    // parse configuration file
+    const pstree &data_node = root.get_child("data");
+    std::stringstream ss;
+    boost::property_tree::write_json(ss, data_node, false);
+    stl_configuer stStlConfig;
+    parse_configuer(ss.str(),stStlConfig);
+
+    if (stStlConfig.zip_download_url.empty()) {
+        return;
+    }
+
+    // create down directory
+    boost::filesystem::path download_path   = wxStandardPaths::Get().GetUserLocalDataDir();
+    boost::filesystem::path unzip_directory = download_path / boost::filesystem::path("DownLoadStl");
+    boost::filesystem::path zip_file_path   = download_path / boost::filesystem::path(stStlConfig.zip_file_name.c_str());
+    if (!boost::filesystem::exists(unzip_directory)) 
+    {
+        boost::filesystem::create_directory(unzip_directory);
+        DWORD flag = GetFileAttributes(unzip_directory.wstring().c_str());
+        flag |= FILE_ATTRIBUTE_HIDDEN;
+        SetFileAttributes(unzip_directory.wstring().c_str(), flag);
+    }
+
+    if (!boost::filesystem::exists(zip_file_path)) {
+        boost::filesystem::remove(zip_file_path);
+    }
+
+    ProgressDialog dlg(_L(""), _L("Importing 3D models..."), 100, 
+        find_toplevel_parent(this->mainframe),wxPD_AUTO_HIDE | wxPD_CAN_ABORT | wxPD_APP_MODAL);
+    dlg.Update(0);
+
+
+    // download zip file
+    if (0 != DownLoadStlSelf(stStlConfig.zip_download_url, zip_file_path, dlg, DOWNLOAD_PRECENT, 120)) 
+    {
+        dlg.Close();
+        wxMessageBox(_L("Fail loading, please check network connection and try again"), _L("Error"));
+        return;
+    }
+ 
+    //unzip file
+    //boost::filesystem::path zip_file = download_path / boost::filesystem::path(stStlConfig.zip_file_name);
+    std::vector<boost::filesystem::path> vecFilePath;
+    if (0 != MinizReadFileFromZipFile(zip_file_path, unzip_directory, vecFilePath,dlg,DOWNLOAD_PRECENT,EXTRACT_PRECENT))
+        return;
+
+    dlg.Update(DONE_PRECENT, _L("Generating done"));
+    //import file to OrcaSlicer
+     Plater *curren_plater = NULL;
+    if (!this->mainframe)  return;
+     curren_plater = this->mainframe->m_plater;
+    if (!curren_plater) return;
+     curren_plater->add_file(vecFilePath);
+
+     // remove file
+     #ifdef NOT_REMOVE_FILE
+     #else
+     vecFilePath.push_back(zip_file_path);
+     RemoveFile(vecFilePath);
+     #endif
+}
 
 #endif // __WXMSW__
 
@@ -6483,3 +6922,4 @@ bool is_support_filament(int extruder_id)
 
 } // GUI
 } //Slic3r
+

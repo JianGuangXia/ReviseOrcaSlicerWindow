@@ -20,6 +20,7 @@
 #include "slic3r/Utils/FixModelByWin10.hpp"
 #include "ParamsPanel.hpp"
 
+#define _HIDE_EXPORT_AS_STL
 namespace Slic3r
 {
 namespace GUI
@@ -1037,7 +1038,10 @@ void MenuFactory::create_common_object_menu(wxMenu* menu)
 
     // BBS
     append_menu_item_reload_from_disk(menu);
+    #ifdef _HIDE_EXPORT_AS_STL
+    #else
     append_menu_item_export_stl(menu);
+    #endif
     // "Scale to print volume" makes a sense just for whole object
     append_menu_item_scale_selection_to_fit_print_volume(menu);
 
@@ -1114,7 +1118,10 @@ void MenuFactory::create_extra_object_menu()
     m_object_menu.AppendSeparator();
     append_menu_item_reload_from_disk(&m_object_menu);
     append_menu_item_replace_with_stl(&m_object_menu);
+#ifdef _HIDE_EXPORT_AS_STL
+#else
     append_menu_item_export_stl(&m_object_menu);
+#endif
 }
 
 void MenuFactory::create_bbl_assemble_object_menu()

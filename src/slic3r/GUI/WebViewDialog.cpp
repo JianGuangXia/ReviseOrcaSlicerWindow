@@ -14,6 +14,11 @@
 #include <slic3r/GUI/Widgets/WebView.hpp>
 
 namespace pt = boost::property_tree;
+#ifdef MCOR_TEST
+#define FORM_LETTER_WEBSITE "https://formletter.websitesprojects.top/Client/?app=1 "
+#else
+#define FORM_LETTER_WEBSITE "https://app.formletter.xyz/?app=1"
+#endif
 
 namespace Slic3r {
 namespace GUI {
@@ -32,11 +37,14 @@ namespace GUI {
 WebViewPanel::WebViewPanel(wxWindow *parent)
         : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize)
  {
+   #if 0
     wxString url = wxString::Format("file://%s/web/homepage/index.html", from_u8(resources_dir()));
     wxString strlang = wxGetApp().current_language_code_safe();
     if (strlang != "")
         url = wxString::Format("file://%s/web/homepage/index.html?lang=%s", from_u8(resources_dir()), strlang);
+    #endif
 
+    wxString    url      = FORM_LETTER_WEBSITE;
     wxBoxSizer* topsizer = new wxBoxSizer(wxVERTICAL);
     
 #if !BBL_RELEASE_TO_PUBLIC
@@ -414,6 +422,14 @@ void WebViewPanel::OnFreshLoginStatus(wxTimerEvent &event)
     if (mainframe && mainframe->m_webview == this)
         Slic3r::GUI::wxGetApp().get_login_info();
 }
+
+  bool WebViewPanel::SetCursor(const wxCursor &cursor) 
+  {
+      if (m_browser) {
+          m_browser->SetCursor(cursor);
+      }
+      return true;
+  }
 
 void WebViewPanel::SendRecentList(int images)
 {
@@ -868,9 +884,9 @@ void WebViewPanel::OnError(wxWebViewEvent& evt)
         wxLogMessage("%s", "Error; url='" + evt.GetURL() + "', error='" + category + " (" + evt.GetString() + ")'");
 
     //Show the info bar with an error
-    m_info->ShowMessage(_L("An error occurred loading ") + evt.GetURL() + "\n" +
-        "'" + category + "'", wxICON_ERROR);
-
+    //m_info->ShowMessage(_L("An error occurred loading ") + evt.GetURL() + "\n" +
+    //    "'" + category + "'", wxICON_ERROR);
+    m_info->ShowMessage(_L("An error occurred loading ") +  "the software, please check the network connection and try again", wxICON_ERROR);
     UpdateState();
 }
 

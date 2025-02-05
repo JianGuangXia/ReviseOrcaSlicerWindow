@@ -12,7 +12,7 @@
 
 #define TOPBAR_ICON_SIZE  18
 #define TOPBAR_TITLE_WIDTH  300
-
+#define _HIDE_CALIBRATION_ITEM_
 using namespace Slic3r;
 
 enum CUSTOM_ID
@@ -29,6 +29,7 @@ enum CUSTOM_ID
     ID_AMS_NOTEBOOK,
 };
 
+#define __HIDEN_TOPBAR_SAVE_BUTTON
 class BBLTopbarArt : public wxAuiDefaultToolBarArt
 {
 public:
@@ -226,10 +227,15 @@ void BBLTopbar::Init(wxFrame* parent)
 
     this->AddSpacer(FromDIP(10));
 
-    wxBitmap save_bitmap = create_scaled_bitmap("topbar_save", nullptr, TOPBAR_ICON_SIZE);
-    wxAuiToolBarItem* save_btn = this->AddTool(wxID_SAVE, "", save_bitmap);
+    #ifdef __HIDEN_TOPBAR_SAVE_BUTTON
+    // nothing
+    #else
+    wxBitmap          save_bitmap = create_scaled_bitmap("topbar_save", nullptr, TOPBAR_ICON_SIZE);
+    wxAuiToolBarItem *save_btn    = this->AddTool(wxID_SAVE, "", save_bitmap);
 
     this->AddSpacer(FromDIP(10));
+    #endif // __HIDEN_TOPBAR_SAVE_BUTTON
+
 
     wxBitmap undo_bitmap = create_scaled_bitmap("topbar_undo", nullptr, TOPBAR_ICON_SIZE);
     m_undo_item = this->AddTool(wxID_UNDO, "", undo_bitmap);
@@ -245,10 +251,13 @@ void BBLTopbar::Init(wxFrame* parent)
 
     this->AddSpacer(FromDIP(10));
 
+    #ifdef _HIDE_CALIBRATION_ITEM_
+    #else
     wxBitmap calib_bitmap          = create_scaled_bitmap("calib_sf", nullptr, TOPBAR_ICON_SIZE);
     wxBitmap calib_bitmap_inactive = create_scaled_bitmap("calib_sf_inactive", nullptr, TOPBAR_ICON_SIZE);
     m_calib_item                   = this->AddTool(ID_CALIB, _L("Calibration"), calib_bitmap);
     m_calib_item->SetDisabledBitmap(calib_bitmap_inactive);
+    #endif
 
     this->AddSpacer(FromDIP(10));
     this->AddStretchSpacer(1);
@@ -365,7 +374,10 @@ void BBLTopbar::EnableUndoRedoItems()
 {
     this->EnableTool(m_undo_item->GetId(), true);
     this->EnableTool(m_redo_item->GetId(), true);
+#ifdef _HIDE_CALIBRATION_ITEM_
+#else
     this->EnableTool(m_calib_item->GetId(), true);
+#endif
     Refresh();
 }
 
@@ -373,7 +385,10 @@ void BBLTopbar::DisableUndoRedoItems()
 {
     this->EnableTool(m_undo_item->GetId(), false);
     this->EnableTool(m_redo_item->GetId(), false);
+#ifdef _HIDE_CALIBRATION_ITEM_
+#else
     this->EnableTool(m_calib_item->GetId(), false);
+#endif
     Refresh();
 }
 
@@ -384,11 +399,14 @@ void BBLTopbar::SaveNormalRect()
 
 void BBLTopbar::ShowCalibrationButton(bool show)
 {
+#ifdef _HIDE_CALIBRATION_ITEM_
+#else
     m_calib_item->GetSizerItem()->Show(show);
     m_sizer->Layout();
     if (!show)
         m_calib_item->GetSizerItem()->SetDimension({-1000, 0}, {0, 0});
     Refresh();
+ #endif
 }
 
 void BBLTopbar::OnModelStoreClicked(wxAuiToolBarEvent& event)

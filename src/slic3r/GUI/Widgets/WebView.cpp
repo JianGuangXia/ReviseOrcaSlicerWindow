@@ -258,7 +258,9 @@ wxWebView* WebView::CreateWebView(wxWindow * parent, wxString const & url)
 #elif defined(__WXOSX__)
     wxWebView *webView = new WebViewWebKit;
 #else
+    // origin code
     auto webView = wxWebView::New();
+
 #endif
     if (webView) {
         webView->SetBackgroundColour(StateColor::darkModeColorFor(*wxWHITE));

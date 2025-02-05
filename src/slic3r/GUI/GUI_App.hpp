@@ -95,7 +95,10 @@ enum FileType
 
     FT_SL1,
 
-    FT_SIZE,
+    FT_SIGN3D,
+
+    FT_MODEL_EXCLUDE_3MF,
+    FT_SIZE
 };
 
 extern wxString file_wildcards(FileType file_type, const std::string &custom_extension = std::string{});
@@ -406,7 +409,8 @@ private:
     void            system_info();
     void            keyboard_shortcuts();
     void            load_project(wxWindow *parent, wxString& input_file) const;
-    void            import_model(wxWindow *parent, wxArrayString& input_files) const;
+    void            import_model(wxWindow *parent, wxArrayString &input_files, FileType type = FT_MODEL) const;
+    void            import_encode_3mf(wxWindow *parent, wxString &input_file) const;
     void            load_gcode(wxWindow* parent, wxString& input_file) const;
 
     wxString transition_tridid(int trid_id);
@@ -652,11 +656,16 @@ private:
     bool            config_wizard_startup();
 	void            check_updates(const bool verbose);
 
+    void            handle_export_outline(const boost::property_tree::ptree& root);
+    void            handle_download_stl(const boost::property_tree::ptree &root);
     bool                    m_init_app_config_from_older { false };
     bool                    m_datadir_redefined { false };
     std::string             m_older_data_dir_path;
     boost::optional<Semver> m_last_config_version;
     bool                    m_config_corrupted { false };
+
+    // have download file set
+    std::set<std::string>   m_HaveDownStl;
 };
 
 DECLARE_APP(GUI_App)

@@ -150,7 +150,9 @@ static const std::pair<unsigned int, unsigned int> THUMBNAIL_SIZE_3MF = { 512, 5
 #define _HIDE_PRITER_SETTING
 #define _DELETE_PRINTER_EDIT_
 #define _DELETE_WIFI_PIC_
-#define _DELETE_BED_TYPE_COMBOX_
+//#define _DELETE_BED_TYPE_COMBOX_
+#define _HIDE_IMPORT_FILE
+#define _FILTER_GENERIC_3MF
 namespace Slic3r {
 namespace GUI {
 
@@ -604,8 +606,9 @@ Sidebar::Sidebar(Plater *parent)
                 p->editing_filament = 0;
         });
         combo_printer->edit_btn = edit_btn;
+#endif
         p->combo_printer        = combo_printer;
-        #endif
+   
 
         #ifdef _DELETE_WIFI_PIC_
         #else
@@ -704,6 +707,9 @@ Sidebar::Sidebar(Plater *parent)
         p->m_panel_printer_content->SetSizer(vsizer_printer);
         p->m_panel_printer_content->Layout();
         scrolled_sizer->Add(p->m_panel_printer_content, 0, wxEXPAND, 0);
+
+        bed_type_title->Hide();
+        m_bed_type_list->Hide();
     }
 
     {
@@ -1290,6 +1296,7 @@ void Sidebar::msw_rescale()
 #else
     m_bed_type_list->Rescale();
     m_bed_type_list->SetMinSize({-1, 3 * wxGetApp().em_unit()});
+
 #endif
 
 #if 0
@@ -1794,8 +1801,18 @@ bool PlaterDropTarget::OnDropFiles(wxCoord x, wxCoord y, const wxArrayString &fi
     this->MSWUpdateDragImageOnLeave();
 #endif // WIN32
 
-    BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": drag %1% files into app")%filenames.size();
-    m_filenames = filenames;
+    wxArrayString filter_receive_files = filenames;
+    #ifdef _FILTER_GENERIC_3MF
+    int cnt = filenames.GetCount();
+    for (size_t i = 0; i < cnt; i++) 
+    {
+        const boost::filesystem::path file_path = filenames.Item(i);
+        if (file_path.extension() == ".3mf")
+            filter_receive_files.RemoveAt(i);
+    }
+    #endif
+    BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": drag %1% files into app") % filter_receive_files.size();
+    m_filenames = filter_receive_files;
     wxGetApp().Bind(wxEVT_IDLE, &PlaterDropTarget::handleOnIdle, this);
     return true;
 }
@@ -3108,7 +3125,11 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
         const auto filename         = path.filename();
         int  progress_percent = static_cast<int>(100.0f * static_cast<float>(i) / static_cast<float>(input_files.size()));
         const auto real_filename    = (strategy & LoadStrategy::Restore) ? input_files[++i].filename() : filename;
-        const auto dlg_info         = _L("Loading file") + ": " + from_path(real_filename);
+        #ifdef _HIDE_IMPORT_FILE
+        const auto dlg_info = _L("");
+        #else
+        const auto dlg_info = _L("Loading file") + ": " + from_path(real_filename);
+        #endif
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": load file %1%") % filename;
         dlg_cont = dlg.Update(progress_percent, dlg_info);
         if (!dlg_cont) return empty_result;
@@ -3150,7 +3171,13 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                                                  float percent_float = (100.0f * (float)i / (float)total_files) + INPUT_FILES_RATIO * ((float)stage_percent[import_stage] + (float)current * (float)(stage_percent[import_stage + 1] - stage_percent[import_stage]) /(float) total) / (float)total_files;
                                                                  BOOST_LOG_TRIVIAL(trace) << "load_3mf_file: percent(float)=" << percent_float << ", stage = " << import_stage << ", curr = " << current << ", total = " << total;
                                                                  progress_percent = (int)percent_float;
-                                                                 wxString msg  = wxString::Format(_L("Loading file: %s"), from_path(real_filename));
+                                                                 #ifdef _HIDE_IMPORT_FILE
+                                                                 wxString msg = _L("");
+                                                                 #else
+                                                                 wxString msg = wxString::Format(_L("Loading file: %s"),
+                                                                                                 from_path(real_filename));
+                                                                 #endif
+                                                              
                                                                  cont          = dlg.Update(progress_percent, msg);
                                                                  cancel        = !cont;
                                                                  if (cancel)
@@ -3284,7 +3311,12 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                     // plate data
                     if (plate_data.size() > 0) {
                         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format(", import 3mf UPDATE_GCODE_RESULT \n");
+                        #ifdef _HIDE_IMPORT_FILE
+                        wxString msg = _L("");
+                        #else
                         wxString msg = wxString::Format(_L("Loading file: %s"), from_path(real_filename));
+                        #endif
+                
                         dlg_cont     = dlg.Update(progress_percent, msg);
                         if (!dlg_cont) {
                             q->skip_thumbnail_invalid = false;
@@ -3327,7 +3359,12 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
 
                     if (load_config && !config_loaded.empty()) {
                         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format(", import 3mf IMPORT_LOAD_CONFIG \n");
+                        #ifdef _HIDE_IMPORT_FILE
+                        wxString msg = _L("");
+                        #else
                         wxString msg = wxString::Format(_L("Loading file: %s"), from_path(real_filename));
+                        #endif
+                   
                         dlg_cont     = dlg.Update(progress_percent, msg);
                         if (!dlg_cont) {
                             q->skip_thumbnail_invalid = false;
@@ -3484,7 +3521,11 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             float percent_float = (100.0f * (float)i / (float)total_files) + INPUT_FILES_RATIO * 100.0f * ((float)current / (float)total) / (float)total_files;
                             BOOST_LOG_TRIVIAL(trace) << "load_stl_file: percent(float)=" << percent_float << ", curr = " << current << ", total = " << total;
                             progress_percent = (int)percent_float;
+                            #ifdef _HIDE_IMPORT_FILE
+                            wxString msg  = _L("");
+                            #else
                             wxString msg  = wxString::Format(_L("Loading file: %s"), from_path(real_filename));
+                            #endif
                             cont          = dlg.Update(progress_percent, msg);
                             cancel        = !cont;
                      },
@@ -3494,7 +3535,11 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             float percent_float = (100.0f * (float)i / (float)total_files) + INPUT_FILES_RATIO * ((float)step_percent[load_stage] + (float)current * (float)(step_percent[load_stage + 1] - step_percent[load_stage]) / (float)total) / (float)total_files;
                             BOOST_LOG_TRIVIAL(trace) << "load_step_file: percent(float)=" << percent_float << ", stage = " << load_stage << ", curr = " << current << ", total = " << total;
                             progress_percent = (int)percent_float;
+                            #ifdef _HIDE_IMPORT_FILE
+                            wxString msg = _L("");
+                            #else
                             wxString msg  = wxString::Format(_L("Loading file: %s"), from_path(real_filename));
+                            #endif
                             cont          = dlg.Update(progress_percent, msg);
                             cancel        = !cont;
                     },
@@ -3635,7 +3680,11 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
 
             // BBS
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format("import 3mf IMPORT_LOAD_MODEL_OBJECTS \n");
-            wxString msg = wxString::Format("Loading file: %s", from_path(real_filename));
+#ifdef _HIDE_IMPORT_FILE
+            wxString msg = _L("");
+#else
+            wxString msg = wxString::Format(_L("Loading file: %s"), from_path(real_filename));
+#endif
             model_idx++;
             dlg_cont = dlg.Update(progress_percent, msg);
             if (!dlg_cont) {
@@ -3670,7 +3719,11 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
             obj_idxs.insert(obj_idxs.end(), loaded_idxs.begin(), loaded_idxs.end());
 
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format("import 3mf IMPORT_LOAD_MODEL_OBJECTS \n");
+#ifdef _HIDE_IMPORT_FILE
+            wxString msg = _L("");
+#else
             wxString msg = wxString::Format(_L("Loading file: %s"), from_path(real_filename));
+#endif
             dlg_cont     = dlg.Update(progress_percent, msg);
             if (!dlg_cont) {
                 q->skip_thumbnail_invalid = false;
@@ -3682,7 +3735,11 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                 new_model->add_object(*model_object);
 
                 BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" << __LINE__ << boost::format("import 3mf IMPORT_ADD_MODEL_OBJECTS \n");
+#ifdef _HIDE_IMPORT_FILE
+                wxString msg = _L("");
+#else
                 wxString msg = wxString::Format(_L("Loading file: %s"), from_path(real_filename));
+#endif
                 dlg_cont     = dlg.Update(progress_percent, msg);
                 if (!dlg_cont) {
                     q->skip_thumbnail_invalid = false;
@@ -3970,11 +4027,19 @@ fs::path Plater::priv::get_export_file_path(GUI::FileType file_type)
     if (file_type == FT_3MF)
         // for 3mf take the path from the project filename, if any
         output_file = into_path(get_project_filename(".3mf"));
+    else if (file_type == FT_SIGN3D) {
+        output_file = into_path(get_project_filename(".s3d"));
+    }
 
     //bbs  name the project using the part name
     if (output_file.empty()) {
         if (get_project_name() != _L("Untitled")) {
-            output_file = into_path(get_project_name() + ".3mf");
+            if (file_type == FT_3MF)
+                // for 3mf take the path from the project filename, if any
+                output_file = into_path(get_project_filename(".3mf"));
+            else if (file_type == FT_SIGN3D) {
+                output_file = into_path(get_project_filename(".s3d"));
+            }
         }
     }
 
@@ -4008,6 +4073,7 @@ wxString Plater::priv::get_export_file(GUI::FileType file_type)
         case FT_3MF:
         case FT_GCODE:
         case FT_OBJ:
+        case FT_SIGN3D:
             wildcard = file_wildcards(file_type);
         break;
         default:
@@ -4042,6 +4108,11 @@ wxString Plater::priv::get_export_file(GUI::FileType file_type)
         {
             output_file.replace_extension("obj");
             dlg_title = _L("Export OBJ file:");
+            break;
+        }
+        case FT_SIGN3D: {
+            output_file.replace_extension("s3d");
+            dlg_title = _L("Save file as:");
             break;
         }
         default: break;
@@ -6199,7 +6270,8 @@ void Plater::priv::on_action_add(SimpleEvent&)
     if (q != nullptr) {
         //q->add_model();
         //BBS open file in toolbar add
-        q->add_file();
+       /* q->add_file();*/
+        q->add_file_exclude_origin_3mf();
     }
 }
 
@@ -7989,25 +8061,46 @@ void Plater::load_project(wxString const& filename2,
 }
 
 // BBS: save logic
+// add save as encrypt project logic
 int Plater::save_project(bool saveAs)
 {
     //if (up_to_date(false, false)) // should we always save
     //    return;
+    bool  encrypt = true;
+    GUI::FileType file_type = FT_3MF;
+    if (encrypt) {
+        file_type = FT_SIGN3D;
+    }
     auto filename = get_project_filename(".3mf");
     if (!saveAs && filename.IsEmpty())
         saveAs = true;
     if (saveAs)
-        filename = p->get_export_file(FT_3MF);
+        filename = p->get_export_file(file_type);
     if (filename.empty())
         return wxID_NO;
     if (filename == "<cancel>")
         return wxID_CANCEL;
 
-    //BBS export 3mf without gcode
-    if (export_3mf(into_path(filename), SaveStrategy::SplitModel | SaveStrategy::ShareMesh) < 0) {
-        MessageDialog(this, _L("Failed to save the project.\nPlease check whether the folder exists online or if other programs open the project file."),
-            _L("Save project"), wxOK | wxICON_WARNING).ShowModal();
-        return wxID_CANCEL;
+    if (file_type == FT_SIGN3D) {
+        // export encrypt model
+        if (export_3mf(into_path(filename), SaveStrategy::SplitModel | SaveStrategy::ShareMesh,-1,nullptr,true) < 0) {
+            MessageDialog(this,
+                          _L("Failed to save the project.\nPlease check whether the folder exists online or if other programs open the "
+                             "project file."),
+                          _L("Save project"), wxOK | wxICON_WARNING)
+                .ShowModal();
+            return wxID_CANCEL;
+        }
+    } else {
+        // BBS export 3mf without gcode
+        if (export_3mf(into_path(filename), SaveStrategy::SplitModel | SaveStrategy::ShareMesh) < 0) {
+            MessageDialog(this,
+                          _L("Failed to save the project.\nPlease check whether the folder exists online or if other programs open the "
+                             "project file."),
+                          _L("Save project"), wxOK | wxICON_WARNING)
+                .ShowModal();
+            return wxID_CANCEL;
+        }
     }
 
     Slic3r::remove_backup(model(), false);
@@ -8240,6 +8333,30 @@ void Plater::import_model_id(wxString download_info)
         return;
     }
 }
+
+  void Plater::load_encode_3mf_file() 
+  {
+      wxString input_file;
+      wxGetApp().import_encode_3mf(this, input_file);
+
+      // something to do
+      wxBusyCursor wait;
+      if (!input_file.empty()) 
+      {
+          // decode file
+          boost::filesystem::path after_decode_file_path;
+          XorDecodeFile(boost::filesystem::path(input_file),after_decode_file_path);
+
+          // replace extension
+          //if (after_decode_file_path.extension() != ".3mf") {
+          //    after_decode_file_path.replace_extension(".3mf");
+          //}
+
+          // load file
+          open_3mf_file(after_decode_file_path,true);
+          boost::filesystem::remove(after_decode_file_path);
+      }
+  }
 
 //BBS download project by project id
 void Plater::download_project(const wxString& project_id)
@@ -9463,10 +9580,10 @@ bool Plater::load_files(const wxArrayString& filenames)
 }
 
 
-bool Plater::open_3mf_file(const fs::path &file_path)
+bool Plater::open_3mf_file(const fs::path &file_path, bool encode/* = false*/)
 {
     std::string filename = encode_path(file_path.filename().string().c_str());
-    if (!boost::algorithm::iends_with(filename, ".3mf")) {
+    if (!boost::algorithm::iends_with(filename, ".3mf") && !encode) {
         return false;
     }
 
@@ -9532,7 +9649,26 @@ void Plater::add_file()
 
     std::vector<fs::path> paths;
     for (const auto &file : input_files) paths.emplace_back(into_path(file));
+    
+    add_file(paths);
+}
 
+void Plater::add_file_exclude_origin_3mf() 
+{
+    wxArrayString input_files;
+    wxGetApp().import_model(this, input_files,FT_MODEL_EXCLUDE_3MF);
+    if (input_files.empty())
+        return;
+
+    std::vector<fs::path> paths;
+    for (const auto &file : input_files)
+        paths.emplace_back(into_path(file));
+
+    add_file(paths);
+}
+
+void Plater::add_file(const std::vector<fs::path> &paths) 
+{
     std::string snapshot_label;
     assert(!paths.empty());
 
@@ -9548,35 +9684,48 @@ void Plater::add_file()
     auto loadfiles_type  = LoadFilesType::NoFile;
     auto amf_files_count = get_3mf_file_count(paths);
 
-    if (paths.size() > 1 && amf_files_count < paths.size()) { loadfiles_type = LoadFilesType::Multiple3MFOther; }
-    if (paths.size() > 1 && amf_files_count == paths.size()) { loadfiles_type = LoadFilesType::Multiple3MF; }
-    if (paths.size() > 1 && amf_files_count == 0) { loadfiles_type = LoadFilesType::MultipleOther; }
-    if (paths.size() == 1 && amf_files_count == 1) { loadfiles_type = LoadFilesType::Single3MF; };
-    if (paths.size() == 1 && amf_files_count == 0) { loadfiles_type = LoadFilesType::SingleOther; };
+    if (paths.size() > 1 && amf_files_count < paths.size()) {
+        loadfiles_type = LoadFilesType::Multiple3MFOther;
+    }
+    if (paths.size() > 1 && amf_files_count == paths.size()) {
+        loadfiles_type = LoadFilesType::Multiple3MF;
+    }
+    if (paths.size() > 1 && amf_files_count == 0) {
+        loadfiles_type = LoadFilesType::MultipleOther;
+    }
+    if (paths.size() == 1 && amf_files_count == 1) {
+        loadfiles_type = LoadFilesType::Single3MF;
+    };
+    if (paths.size() == 1 && amf_files_count == 0) {
+        loadfiles_type = LoadFilesType::SingleOther;
+    };
 
     auto first_file = std::vector<fs::path>{};
     auto tmf_file   = std::vector<fs::path>{};
     auto other_file = std::vector<fs::path>{};
 
-    switch (loadfiles_type)
-    {
-    case LoadFilesType::Single3MF:
-        open_3mf_file(paths[0]);
-    	break;
+    switch (loadfiles_type) {
+    case LoadFilesType::Single3MF: open_3mf_file(paths[0]); break;
 
     case LoadFilesType::SingleOther: {
         Plater::TakeSnapshot snapshot(this, snapshot_label);
-        if (!load_files(paths, LoadStrategy::LoadModel, false).empty()) { wxGetApp().mainframe->update_title(); }
+        if (!load_files(paths, LoadStrategy::LoadModel, false).empty()) {
+            wxGetApp().mainframe->update_title();
+        }
         break;
     }
     case LoadFilesType::Multiple3MF:
         first_file = std::vector<fs::path>{paths[0]};
         for (auto i = 0; i < paths.size(); i++) {
-            if (i > 0) { other_file.push_back(paths[i]); }
+            if (i > 0) {
+                other_file.push_back(paths[i]);
+            }
         };
 
         open_3mf_file(first_file[0]);
-        if (!load_files(other_file, LoadStrategy::LoadModel).empty()) { wxGetApp().mainframe->update_title(); }
+        if (!load_files(other_file, LoadStrategy::LoadModel).empty()) {
+            wxGetApp().mainframe->update_title();
+        }
         break;
 
     case LoadFilesType::MultipleOther: {
@@ -9600,9 +9749,11 @@ void Plater::add_file()
 
         open_3mf_file(first_file[0]);
         load_files(tmf_file, LoadStrategy::LoadModel);
-        if (!load_files(other_file, LoadStrategy::LoadModel, false).empty()) { wxGetApp().mainframe->update_title(); }
+        if (!load_files(other_file, LoadStrategy::LoadModel, false).empty()) {
+            wxGetApp().mainframe->update_title();
+        }
         break;
-    default:break;
+    default: break;
     }
 }
 
@@ -10194,12 +10345,20 @@ void Plater::send_gcode_finish(wxString name)
     p->notification_manager->push_exporting_finished_notification(out_str, "", false);
 }
 
-void Plater::export_core_3mf()
+void Plater::export_core_3mf(bool encode/* = false*/)
 {
-    wxString path = p->get_export_file(FT_3MF);
+    wxString path;
+    if (!encode) {
+       path = p->get_export_file(FT_3MF);
+    } else
+    {
+       path = p->get_export_file(FT_SIGN3D);
+    }
+  
     if (path.empty()) { return; }
     const std::string path_u8 = into_u8(path);
-    export_3mf(path_u8, SaveStrategy::Silence);
+    //export_3mf(path_u8, SaveStrategy::Silence);
+    export_3mf(path_u8, SaveStrategy::Silence, -1, nullptr, encode);
 }
 
 
@@ -10440,7 +10599,7 @@ void Plater::export_stl(bool extended, bool selection_only)
 }*/
 
 // BBS: backup
-int Plater::export_3mf(const boost::filesystem::path& output_path, SaveStrategy strategy, int export_plate_idx, Export3mfProgressFn proFn)
+int Plater::export_3mf(const boost::filesystem::path& output_path, SaveStrategy strategy, int export_plate_idx, Export3mfProgressFn proFn, bool encode)
 {
     int ret = 0;
     //if (p->model.objects.empty()) {
@@ -10455,7 +10614,7 @@ int Plater::export_3mf(const boost::filesystem::path& output_path, SaveStrategy 
     bool export_config = true;
     wxString path = from_path(output_path);
 
-    if (!path.Lower().EndsWith(".3mf"))
+    if (!path.Lower().EndsWith(".3mf") && !encode)
         return -1;
 
     DynamicPrintConfig cfg = wxGetApp().preset_bundle->full_config_secure();
@@ -10611,6 +10770,11 @@ int Plater::export_3mf(const boost::filesystem::path& output_path, SaveStrategy 
             // Success
             p->set_project_filename(path);
         }
+
+            // encode 3mf file
+        if (encode) {
+            XorEncodeFile(output_path);
+        }
     }
     else {
         ret = -1;
@@ -10645,8 +10809,124 @@ int Plater::export_3mf(const boost::filesystem::path& output_path, SaveStrategy 
     }
     picking_thumbnails.clear();
 
+
     return ret;
 }
+
+boost::filesystem::path GetBakFileName(const boost::filesystem::path &input_path)
+{
+    boost::filesystem::path ret_path;
+    if (input_path.empty()) {
+        return ret_path;
+    }
+
+    boost::filesystem::path file_name     = input_path.filename();
+    boost::filesystem::path parent_path   = input_path.parent_path();
+    std::string             file_name_str = file_name.string();
+    int                     iIndex        = file_name_str.rfind('.');
+    if (iIndex == std::string::npos) {
+        return ret_path;
+    }
+
+    file_name_str = file_name_str.substr(0, iIndex);
+    file_name_str.append("_bak.3mf");
+    ret_path = parent_path.append("\\").append(file_name_str.c_str());
+    return ret_path;
+}
+
+
+int Plater::XorEncodeFile(const boost::filesystem::path &output_path) 
+{ 
+    boost::filesystem::path bak_file_path = GetBakFileName(output_path);
+    if (boost::filesystem::exists(bak_file_path)) 
+    {
+        boost::filesystem::remove(bak_file_path);
+    }
+    else 
+    {
+        boost::filesystem::rename(output_path, bak_file_path);
+    }
+
+    ifstream ifs;
+    ofstream ofs;
+    ifs.open(bak_file_path.wstring(), std::ios::binary);
+    if (!ifs) 
+    {
+        return -1;
+    }
+
+    ofs.open(output_path.wstring(),std::ios::app | std::ios::binary);
+    if (!ofs) 
+    {
+       return -1;
+    }
+
+    
+    static const char encode_key[16 + 1]    = {"12345678!@#$%^&*"};
+    char              read_buffer[4 * 1024] = {0};
+    int               iTotalCount           = 0;
+    while (!ifs.eof()) 
+    {
+        ifs.read(read_buffer,sizeof(read_buffer) -1);
+        int iReadCount = ifs.gcount();
+        iTotalCount += iReadCount;
+        char write_buffer[4 * 1024] = {0};
+        for (size_t i = 0; i < iReadCount; i++)
+        {
+            write_buffer[i] = read_buffer[i] ^ encode_key[i % strlen(encode_key)];
+        }
+        write_buffer[iReadCount] = '\0';
+        ofs.write(write_buffer,iReadCount);
+        memset(read_buffer, 0, sizeof(read_buffer));
+    }
+
+    ifs.close();
+    ofs.close();
+    boost::filesystem::remove(bak_file_path);
+    return 0; 
+}
+
+
+int   Plater::XorDecodeFile(const boost::filesystem::path &input_path, boost::filesystem::path &output_path)
+{
+    output_path  = GetBakFileName(input_path);
+    if (boost::filesystem::exists(output_path)) {
+        boost::filesystem::remove(output_path);
+    } 
+
+    ifstream ifs;
+    ofstream ofs;
+    ifs.open(input_path.wstring(), std::ios::binary);
+    if (!ifs) {
+        return -1;
+    }
+
+    ofs.open(output_path.wstring(), std::ios::app | std::ios::binary);
+    if (!ofs) {
+        return -1;
+    }
+
+    static const char encode_key[16 + 1]    = {"12345678!@#$%^&*"};
+    char              read_buffer[4 * 1024] = {0};
+    int               iTotalCount           = 0;
+    while (!ifs.eof()) {
+        ifs.read(read_buffer, sizeof(read_buffer) - 1);
+        int iReadCount = ifs.gcount();
+        iTotalCount += iReadCount;
+        char write_buffer[4 * 1024] = {0};
+        for (size_t i = 0; i < iReadCount; i++) {
+            write_buffer[i] = read_buffer[i] ^ encode_key[i % strlen(encode_key)];
+        }
+        write_buffer[iReadCount] = '\0';
+        ofs.write(write_buffer, iReadCount);
+        memset(read_buffer, 0, sizeof(read_buffer));
+    }
+
+    ifs.close();
+    ofs.close();
+    return 0;
+}
+
 
 void Plater::publish_project()
 {

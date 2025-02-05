@@ -24,12 +24,14 @@
 #include "MainFrame.hpp"
 #include <boost/dll.hpp>
 #include <slic3r/GUI/Widgets/WebView.hpp>
+#include <slic3r/Utils/check_md5.h>
 #include <slic3r/Utils/Http.hpp>
 #include <libslic3r/miniz_extension.hpp>
 #include <libslic3r/Utils.hpp>
 
 using namespace nlohmann;
-
+#define _CHANGE_GUID_PAGE
+#define _CHECK_PROFILE_FILE
 namespace Slic3r { namespace GUI {
 
 json m_ProfileJson;
@@ -143,7 +145,11 @@ wxString GuideFrame::SetStartPage(GuidePage startpage, bool load)
 
     if (startpage == BBL_WELCOME){
         SetTitle(_L("Setup Wizard"));
+#ifdef _CHANGE_GUID_PAGE
+        TargetUrl = from_u8((boost::filesystem::path(resources_dir()) / "web/guide/21/index.html").make_preferred().string());
+#else
         TargetUrl = from_u8((boost::filesystem::path(resources_dir()) / "web/guide/1/index.html").make_preferred().string());
+ #endif
     } else if (startpage == BBL_REGION) {
         SetTitle(_L("Setup Wizard"));
         TargetUrl = from_u8((boost::filesystem::path(resources_dir()) / "web/guide/11/index.html").make_preferred().string());
@@ -972,11 +978,20 @@ int GuideFrame::LoadProfile()
         // BBS: add BBL as default
         // BBS: add json logic for vendor bundle
         auto bbl_bundle_path = vendor_dir;
+
+#ifndef _CHECK_PROFILE_FILE
         bbl_bundle_rsrc = false;
         if (!boost::filesystem::exists((vendor_dir / PresetBundle::BBL_BUNDLE).replace_extension(".json"))) {
             bbl_bundle_path = rsrc_vendor_dir;
             bbl_bundle_rsrc = true;
         }
+#else
+        bbl_bundle_path = rsrc_vendor_dir;
+        bbl_bundle_rsrc = true;
+        if (!CheckProfile(rsrc_vendor_dir)) {
+            return 0;
+        }
+ #endif // _CHECK_PROFILE_FILE
 
         // intptr_t    handle;
         //_finddata_t findData;
@@ -1117,6 +1132,11 @@ int GuideFrame::LoadProfile()
     return 0;
 }
 
+bool GuideFrame::CheckProfile(const boost::filesystem::path &resource_path) 
+{ 
+    return check_file_md5(resource_path); 
+}
+  
 void StringReplace(string &strBase, string strSrc, string strDes)
 {
     string::size_type pos    = 0;

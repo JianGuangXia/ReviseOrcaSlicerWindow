@@ -25,6 +25,7 @@
 #endif //__WINDOWS__
 
 #define REPLACEED_APP_NAME "FormLetter"
+#define _HIDE_PRESETS
 namespace Slic3r { namespace GUI {
 
 WX_DEFINE_LIST(RadioSelectorList);
@@ -999,12 +1000,19 @@ wxWindow* PreferencesDialog::create_general_page()
 
     auto item_gcode_window = create_item_checkbox(_L("Show g-code window"), page, _L("If enabled, g-code window will be displayed."), 50, "show_gcode_window");
 
-    auto title_presets = create_item_title(_L("Presets"), page, _L("Presets"));
-    auto item_user_sync        = create_item_checkbox(_L("Auto sync user presets(Printer/Filament/Process)"), page, _L("User Sync"), 50, "sync_user_preset");
-    auto item_system_sync        = create_item_checkbox(_L("Update built-in Presets automatically."), page, _L("System Sync"), 50, "sync_system_preset");
-    auto item_save_presets = create_item_button(_L("Clear my choice on the unsaved presets."), _L("Clear"), page, _L("Clear my choice on the unsaved presets."), []() {
-        wxGetApp().app_config->set("save_preset_choise", "");
-    });
+    #ifdef _HIDE_PRESETS
+    #else
+    auto title_presets     = create_item_title(_L("Presets"), page, _L("Presets"));
+    auto item_user_sync    = create_item_checkbox(_L("Auto sync user presets(Printer/Filament/Process)"), page, _L("User Sync"), 50,
+                                               "sync_user_preset");
+    auto item_system_sync  = create_item_checkbox(_L("Update built-in Presets automatically."), page, _L("System Sync"), 50,
+                                                 "sync_system_preset");
+    auto item_save_presets = create_item_button(_L("Clear my choice on the unsaved presets."), _L("Clear"), page,
+                                                _L("Clear my choice on the unsaved presets."),
+                                                []() { wxGetApp().app_config->set("save_preset_choise", ""); });
+    #endif // _HIDE_PRESETS
+
+
 
 #ifdef _WIN32
     #if 0
@@ -1079,13 +1087,13 @@ wxWindow* PreferencesDialog::create_general_page()
     sizer_page->Add(item_hints, 0, wxTOP, FromDIP(3));
     #endif
     sizer_page->Add(item_gcode_window, 0, wxTOP, FromDIP(3));
+#if 0
     sizer_page->Add(title_presets, 0, wxTOP | wxEXPAND, FromDIP(20));
-    #if 0
     sizer_page->Add(item_stealth_mode, 0, wxTOP, FromDIP(3));
-    #endif
     sizer_page->Add(item_user_sync, 0, wxTOP, FromDIP(3));
     sizer_page->Add(item_system_sync, 0, wxTOP, FromDIP(3));
     sizer_page->Add(item_save_presets, 0, wxTOP, FromDIP(3));
+#endif
 #ifdef _WIN32
     sizer_page->Add(title_associate_file, 0, wxTOP| wxEXPAND, FromDIP(20));
     sizer_page->Add(item_associate_3mf, 0, wxTOP, FromDIP(3));

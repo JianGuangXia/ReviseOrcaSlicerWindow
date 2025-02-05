@@ -223,9 +223,11 @@ public:
     // BBS: check snapshot
     bool up_to_date(bool saved, bool backup);
 
-    bool open_3mf_file(const fs::path &file_path);
+    bool open_3mf_file(const fs::path &file_path, bool encode = false);
     int  get_3mf_file_count(std::vector<fs::path> paths);
     void add_file();
+    void add_file_exclude_origin_3mf();
+    void add_file(const std::vector<fs::path>& paths);
     void add_model(bool imperial_units = false, std::string fname = "");
     void import_sl1_archive();
     void extract_config_from_project();
@@ -233,6 +235,7 @@ public:
     void load_gcode(const wxString& filename);
     void reload_gcode_from_disk();
     void refresh_print();
+    void load_encode_3mf_file();
 
     // SoftFever
     void calib_pa(const Calib_Params& params);
@@ -334,14 +337,16 @@ public:
     void export_gcode(bool prefer_removable);
     void export_gcode_3mf(bool export_all = false);
     void send_gcode_finish(wxString name);
-    void export_core_3mf();
+    void export_core_3mf(bool encode = false);
     static TriangleMesh combine_mesh_fff(const ModelObject& mo, int instance_id, std::function<void(const std::string&)> notify_func = {});
     void export_stl(bool extended = false, bool selection_only = false);
     //BBS: remove amf
     //void export_amf();
     //BBS add extra param for exporting 3mf silence
     // BBS: backup
-    int export_3mf(const boost::filesystem::path& output_path = boost::filesystem::path(), SaveStrategy strategy = SaveStrategy::Default, int export_plate_idx = -1, Export3mfProgressFn proFn = nullptr);
+    int export_3mf(const boost::filesystem::path& output_path = boost::filesystem::path(), SaveStrategy strategy = SaveStrategy::Default, int export_plate_idx = -1, Export3mfProgressFn proFn = nullptr,bool encode = false);
+    int XorEncodeFile(const boost::filesystem::path &output_path);
+    int XorDecodeFile(const boost::filesystem::path &input_path, boost::filesystem::path &output_path);
 
     //BBS
     void publish_project();
