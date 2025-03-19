@@ -1,5 +1,7 @@
 #include "ReadPointTool.h"
 #include  "cJSON.h"
+#include <iostream>
+#include <sstream>
 
 typedef struct pointCoordinate
 {
@@ -91,6 +93,16 @@ std::map<std::string, Model_Container>* ReadPointTool::GetMapData()
   return &m_mapData;
 }
 
+double ToDouble(const char *InputString_) 
+{ 
+    //atof 会根据本地化语言设置,导致字符串转double型数值产生bug
+    std::istringstream istr(InputString_);
+    istr.imbue(std::locale("C"));
+    double value = 0.0;
+    istr >> value;
+    return value;
+}
+
 pointCoordinate GetPointInfor(cJSON* poInt)
 {
   pointCoordinate stpointCoordinate = { 0 };
@@ -98,12 +110,12 @@ pointCoordinate GetPointInfor(cJSON* poInt)
   cJSON* second_item = cJSON_GetArrayItem(poInt, 1);
   if (first_item && first_item->type == cJSON_String)
   {
-    stpointCoordinate.x = atof(first_item->valuestring);
+      stpointCoordinate.x = ToDouble(first_item->valuestring);
   }
 
   if (second_item && second_item->type == cJSON_String)
   {
-      stpointCoordinate.y = atof(second_item->valuestring);
+      stpointCoordinate.y = ToDouble(second_item->valuestring);
   }
   return stpointCoordinate;
 }

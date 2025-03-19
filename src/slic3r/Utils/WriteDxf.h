@@ -31,7 +31,7 @@ public:
 
  private:
   void CollectLineData(std::vector<DL_LineData> &out_data, enLocation location);
-  std::string ComposeFilePath(const std::string &out_directory, enLocation location);
+  std::string ComposeFilePath(const std::string &out_directory, enLocation location,bool origin = false);
   private:
   std::string  m_OriginTextFilePath;
   ReadPointTool m_tool;

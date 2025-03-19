@@ -2,6 +2,13 @@
 //#include "dxf/dl_dxf.h"
 #include "windows.h"
 #include "dx_iface.h"
+#include <fstream>
+
+#ifndef DEBUG_DXF
+#define DEBUG_DXF
+#endif // !1
+
+
 WriteDxf::WriteDxf(const std::string& file)
 : m_OriginTextFilePath(file), m_tool(file)
 {
@@ -93,6 +100,22 @@ WriteDxf::WriteDxf() {
 
      iface->fileExport(file_path, out_version, false, &data);
      delete iface;
+
+
+     #ifdef DEBUG_DXF
+     std::string origin_file_path = ComposeFilePath(outFilePath, location,true);
+
+     std::ofstream ofs;
+     ofs.open(origin_file_path, std::ios_base::in | std::ios_base::trunc);
+
+     if (!ofs.is_open()) 
+     {
+         return 0;
+     }
+
+     ofs << inputString;
+     ofs.close();
+     #endif // 0
 
      /*
      DL_Dxf            dxf;
@@ -256,7 +279,7 @@ int WriteDxf::WriteToDxf(const std::string& outFilePath, enLocation location)
   */
 }
 
-std::string WriteDxf::ComposeFilePath(const std::string &out_directory, enLocation location) 
+std::string WriteDxf::ComposeFilePath(const std::string &out_directory, enLocation location, bool origin /*= false*/)
 { 
     std::string strFilePath = out_directory + "\\";
 
@@ -265,34 +288,36 @@ std::string WriteDxf::ComposeFilePath(const std::string &out_directory, enLocati
     char szbuffer[64] = {0};
     snprintf(szbuffer, sizeof(szbuffer) - 1, "%4ld%02d%02d%02d%02d%02d", stSYSTEMTIME.wYear, stSYSTEMTIME.wMonth, stSYSTEMTIME.wDay,
              stSYSTEMTIME.wHour + 8, stSYSTEMTIME.wMinute, stSYSTEMTIME.wSecond);
+    std::string suffix    = origin ? "txt" : "dxf";
     std::string file_name = szbuffer;
+
     if (location == BOTTOM)
     {
         if (m_tool.HasBottomInnerOutLine() && m_tool.HasBottomOuterOutLine())
         {
-            file_name.append("_bottom-outline_inner&outer.dxf ");
+            file_name.append("_bottom-outline_inner&outer.").append(suffix);
         } 
         else if (m_tool.HasBottomInnerOutLine() && !m_tool.HasBottomOuterOutLine())
         {
-            file_name.append("_bottom-outline_inner.dxf ");
+            file_name.append("_bottom-outline_inner.").append(suffix);
         } 
         else if (!m_tool.HasBottomInnerOutLine() && m_tool.HasBottomOuterOutLine())
         {
-            file_name.append("_bottom-outline_outer.dxf ");
+            file_name.append("_bottom-outline_outer.").append(suffix);
         }
     } else if (location == TOP) 
     {
         if (m_tool.HasTopInnerOutLine() && m_tool.HasTopOuterOutLine()) 
         {
-            file_name.append("_top-outline_inner&outer.dxf ");
+            file_name.append("_top-outline_inner&outer.").append(suffix);
         } 
         else if (m_tool.HasTopInnerOutLine() && !m_tool.HasTopOuterOutLine()) 
         {
-            file_name.append("_top-outline_inner.dxf ");
+            file_name.append("_top-outline_inner.").append(suffix);
         } 
         else if (!m_tool.HasTopInnerOutLine() && m_tool.HasTopOuterOutLine()) 
         {
-            file_name.append("_top-outline_outer.dxf ");
+            file_name.append("_top-outline_outer.").append(suffix);
         }
     }
 
